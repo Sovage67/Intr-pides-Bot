@@ -1,0 +1,36 @@
+# Blueprint Render pour le bot Discord
+# Documentation : https://render.com/docs/blueprint-spec
+#
+# Pour déployer :
+# 1. Push ce repo sur GitHub
+# 2. Sur Render → New → Blueprint → connecte le repo
+# 3. Render lit ce fichier et crée le service automatiquement
+# 4. Remplis les variables marquées "sync: false" dans le dashboard Render
+
+services:
+  - type: web
+    name: bot-intrepides-discord
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      # Variables sensibles : à remplir dans le dashboard Render après création
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
