@@ -74,7 +74,7 @@ async function loadEvents() {
 
 async function setupRedisPubSub() {
   await redisSub.subscribe('guild:update');
-  redisSub.on('message', (channel, message) => {
+  redisSub.on('message', (channel: string, message: string) => {
     if (channel === 'guild:update') {
       try {
         const data = JSON.parse(message);
