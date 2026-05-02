@@ -7,6 +7,12 @@ import { logger } from '../lib/logger.js';
 const XP_COOLDOWN_SECONDS = 60;
 const XP_PER_MESSAGE = { min: 15, max: 25 };
 
+type BotModules = {
+  economy?: boolean;
+  levels?: boolean;
+  moderation?: boolean;
+};
+
 function xpForLevel(level: number): number {
   return 5 * level * level + 50 * level + 100;
 }
@@ -18,10 +24,11 @@ export default {
 
     try {
       const config = await getGuildConfig(message.guildId, message.guild.name);
-      const modules = config.modules as { levels?: boolean };
+      const modules = (config.modules ?? {}) as BotModules;
+
+      // ── XP (niveaux) ───────────────────────────────────────────────────────
       if (modules.levels === false) return;
 
-      // Cooldown anti-spam XP via Redis
       const cdKey = `xpcd:${message.guildId}:${message.author.id}`;
       const onCooldown = await redis.get(cdKey);
       if (onCooldown) return;
@@ -55,7 +62,7 @@ export default {
           .catch(() => {});
       }
     } catch (err) {
-      logger.error({ err }, 'Erreur dans messageCreate (XP)');
+      logger.error({ err }, 'Erreur dans messageCreate');
     }
   },
 };

@@ -9,7 +9,7 @@ export default {
     logger.info(`Présent sur ${client.guilds.cache.size} serveur(s)`);
 
     client.user.setPresence({
-      activities: [{ name: '/help', type: 0 }],
+      activities: [{ name: 'Version 0.1', type: 0 }],
       status: 'online',
     });
   },

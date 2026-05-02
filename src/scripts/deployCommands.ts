@@ -25,7 +25,13 @@ async function main() {
   const commands: object[] = [];
   const commandsPath = join(import.meta.dirname, '..', 'commands');
 
+  // Seul le dossier "panels" est déployé sur Discord.
+  // Les autres commandes (moderation, economy, utility) sont exécutées
+  // directement via les menus déroulants des panels et n'apparaissent pas dans le /.
+  const DEPLOYED_CATEGORIES = ['panels'];
+
   for (const category of readdirSync(commandsPath)) {
+    if (!DEPLOYED_CATEGORIES.includes(category)) continue;
     const categoryPath = join(commandsPath, category);
     for (const file of readdirSync(categoryPath).filter(
       (f) => f.endsWith('.ts') || f.endsWith('.js'),

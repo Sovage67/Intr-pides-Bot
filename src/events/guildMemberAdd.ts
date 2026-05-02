@@ -1,11 +1,22 @@
 import { Events, type GuildMember, ChannelType } from 'discord.js';
 import { getGuildConfig } from '../lib/cache.js';
+import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 
 export default {
   name: Events.GuildMemberAdd,
   async execute(member: GuildMember) {
     try {
+      // Journal : enregistrer l'arrivée
+      await prisma.memberLog.create({
+        data: {
+          guildId: member.guild.id,
+          userId: member.id,
+          username: member.user.username,
+          type: 'join',
+        },
+      }).catch(() => {});
+
       const config = await getGuildConfig(member.guild.id, member.guild.name);
 
       // Auto-rôle
