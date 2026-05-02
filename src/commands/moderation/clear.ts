@@ -2,7 +2,6 @@ import {
   SlashCommandBuilder,
   EmbedBuilder,
   PermissionFlagsBits,
-  MessageFlags,
   ChannelType,
 } from 'discord.js';
 import type { SlashCommand } from '../../lib/types.js';
@@ -24,7 +23,7 @@ const command: SlashCommand = {
     if (!interaction.channel || interaction.channel.type !== ChannelType.GuildText) {
       await interaction.reply({
         content: 'Cette commande doit être utilisée dans un salon textuel.',
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       });
       return;
     }
@@ -36,7 +35,7 @@ const command: SlashCommand = {
       .setColor(0x57f287)
       .setDescription(`🧹 ${deleted.size} message(s) supprimé(s).`);
 
-    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    await interaction.reply({ embeds: [embed], ephemeral: true });
   },
 };
 

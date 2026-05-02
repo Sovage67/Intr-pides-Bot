@@ -1,4 +1,4 @@
-import { Events, MessageFlags, type Interaction, type Client } from 'discord.js';
+import { Events, type Interaction, type Client } from 'discord.js';
 import { logger } from '../lib/logger.js';
 import { redis } from '../lib/redis.js';
 
@@ -21,7 +21,7 @@ export default {
         const ttl = await redis.ttl(key);
         await interaction.reply({
           content: `⏳ Patiente encore ${ttl}s avant de réutiliser cette commande.`,
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -34,7 +34,7 @@ export default {
       logger.error({ err, command: command.data.name }, 'Erreur exécution commande');
       const replyOptions = {
         content: 'Une erreur est survenue lors de l\'exécution de cette commande.',
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       };
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(replyOptions).catch(() => {});

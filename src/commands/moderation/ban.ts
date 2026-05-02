@@ -2,7 +2,6 @@ import {
   SlashCommandBuilder,
   EmbedBuilder,
   PermissionFlagsBits,
-  MessageFlags,
 } from 'discord.js';
 import type { SlashCommand } from '../../lib/types.js';
 
@@ -28,7 +27,7 @@ const command: SlashCommand = {
     if (!interaction.guild) {
       await interaction.reply({
         content: 'Cette commande doit être utilisée dans un serveur.',
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       });
       return;
     }
@@ -45,7 +44,7 @@ const command: SlashCommand = {
     } catch {
       await interaction.reply({
         content: 'Impossible de bannir ce membre.',
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       });
       return;
     }

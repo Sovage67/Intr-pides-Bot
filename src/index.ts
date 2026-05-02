@@ -1,8 +1,10 @@
 import 'dotenv/config';
 import { Client, Collection, GatewayIntentBits, Partials } from 'discord.js';
 import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { join, dirname } from 'node:path';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 import { logger } from './lib/logger.js';
 import { redis, redisSub } from './lib/redis.js';
 import { prisma } from './lib/prisma.js';
@@ -29,7 +31,7 @@ const client = new Client({
 client.commands = new Collection<string, SlashCommand>();
 
 async function loadCommands() {
-  const commandsPath = join(import.meta.dirname, 'commands');
+  const commandsPath = join(__dirname, 'commands');
   const categories = readdirSync(commandsPath, { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .map((d) => d.name);
@@ -42,7 +44,7 @@ async function loadCommands() {
     for (const file of files) {
       const mod = await import(pathToFileURL(join(categoryPath, file)).href);
       const command: SlashCommand = mod.default;
-      if (command?.data && command?.execute) {
+      if (command?.data && typeof command.execute === 'function') {
         client.commands.set(command.data.name, command);
         logger.info(`Commande chargée : /${command.data.name}`);
       }
@@ -51,7 +53,7 @@ async function loadCommands() {
 }
 
 async function loadEvents() {
-  const eventsPath = join(import.meta.dirname, 'events');
+  const eventsPath = join(__dirname, 'events');
   const files = readdirSync(eventsPath).filter(
     (f) => f.endsWith('.ts') || f.endsWith('.js'),
   );

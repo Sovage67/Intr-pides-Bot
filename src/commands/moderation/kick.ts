@@ -2,7 +2,6 @@ import {
   SlashCommandBuilder,
   EmbedBuilder,
   PermissionFlagsBits,
-  MessageFlags,
 } from 'discord.js';
 import type { SlashCommand } from '../../lib/types.js';
 
@@ -21,7 +20,7 @@ const command: SlashCommand = {
     if (!interaction.guild) {
       await interaction.reply({
         content: 'Cette commande doit être utilisée dans un serveur.',
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       });
       return;
     }
@@ -32,7 +31,7 @@ const command: SlashCommand = {
     if (!target || !('kickable' in target)) {
       await interaction.reply({
         content: 'Membre introuvable.',
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       });
       return;
     }
@@ -40,7 +39,7 @@ const command: SlashCommand = {
     if (!target.kickable) {
       await interaction.reply({
         content: 'Je ne peux pas expulser ce membre (rang trop élevé ou permissions manquantes).',
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       });
       return;
     }

@@ -2,7 +2,6 @@ import {
   SlashCommandBuilder,
   EmbedBuilder,
   PermissionFlagsBits,
-  MessageFlags,
 } from 'discord.js';
 import type { SlashCommand } from '../../lib/types.js';
 import { prisma } from '../../lib/prisma.js';
@@ -22,7 +21,7 @@ const command: SlashCommand = {
     if (!interaction.guildId) {
       await interaction.reply({
         content: 'Cette commande doit être utilisée dans un serveur.',
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       });
       return;
     }
@@ -33,7 +32,7 @@ const command: SlashCommand = {
     if (target.id === interaction.user.id) {
       await interaction.reply({
         content: 'Tu ne peux pas t\'auto-avertir.',
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       });
       return;
     }
