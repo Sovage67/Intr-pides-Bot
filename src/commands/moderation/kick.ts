@@ -4,6 +4,7 @@ import {
   PermissionFlagsBits,
 } from 'discord.js';
 import type { SlashCommand } from '../../lib/types.js';
+import { checkCooldown } from '../../lib/cooldown.js';
 
 const command: SlashCommand = {
   data: new SlashCommandBuilder()
@@ -22,6 +23,13 @@ const command: SlashCommand = {
         content: 'Cette commande doit être utilisée dans un serveur.',
         ephemeral: true,
       });
+      return;
+    }
+
+    // Cooldown : 1 kick toutes les 5 secondes par modérateur
+    const remaining = await checkCooldown(interaction.user.id, 'kick', 5);
+    if (remaining) {
+      await interaction.reply({ content: `⏳ Cooldown actif, réessaie dans **${remaining}s**.`, ephemeral: true });
       return;
     }
 

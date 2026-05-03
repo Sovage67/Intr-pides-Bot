@@ -5,6 +5,7 @@ import {
   ChannelType,
 } from 'discord.js';
 import type { SlashCommand } from '../../lib/types.js';
+import { checkGuildCooldown } from '../../lib/cooldown.js';
 
 const command: SlashCommand = {
   data: new SlashCommandBuilder()
@@ -25,6 +26,13 @@ const command: SlashCommand = {
         content: 'Cette commande doit être utilisée dans un salon textuel.',
         ephemeral: true,
       });
+      return;
+    }
+
+    // Cooldown global par serveur : 1 clear toutes les 10 secondes (anti-abus)
+    const remaining = await checkGuildCooldown(interaction.guildId!, 'clear', 10);
+    if (remaining) {
+      await interaction.reply({ content: `⏳ Cooldown actif sur ce serveur, réessaie dans **${remaining}s**.`, ephemeral: true });
       return;
     }
 

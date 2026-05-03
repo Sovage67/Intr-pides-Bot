@@ -4,6 +4,7 @@ import {
   PermissionFlagsBits,
 } from 'discord.js';
 import type { SlashCommand } from '../../lib/types.js';
+import { checkCooldown } from '../../lib/cooldown.js';
 
 const command: SlashCommand = {
   data: new SlashCommandBuilder()
@@ -27,6 +28,16 @@ const command: SlashCommand = {
     if (!interaction.guild) {
       await interaction.reply({
         content: 'Cette commande doit être utilisée dans un serveur.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    // Cooldown : 1 ban toutes les 5 secondes par modérateur
+    const remaining = await checkCooldown(interaction.user.id, 'ban', 5);
+    if (remaining) {
+      await interaction.reply({
+        content: `⏳ Cooldown actif, réessaie dans **${remaining}s**.`,
         ephemeral: true,
       });
       return;
