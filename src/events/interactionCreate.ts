@@ -129,6 +129,153 @@ function parseUserId(raw: string): string | null {
   return null;
 }
 
+
+// ─── Helpers manquants ───────────────────────────────────────────────────────
+
+function xpForLevel(level: number): number {
+  return 5 * level * level + 50 * level + 100;
+}
+
+function buildHelpAdminsEmbed(guildName: string): EmbedBuilder {
+  return new EmbedBuilder()
+    .setTitle('🛡️  Aide — Panel Admin')
+    .setColor(0x5865f2)
+    .setDescription('Voici les actions disponibles dans le Panel Admin.')
+    .addFields(
+      { name: '⚠️ Avertir', value: "Émet un avertissement à un membre et l'enregistre en base de données." },
+      { name: '👢 Expulser', value: 'Expulse un membre du serveur (il peut revenir).' },
+      { name: '🔨 Bannir', value: 'Bannit un membre du serveur définitivement.' },
+      { name: '🔇 Rendre muet', value: 'Applique un timeout (mute) à un membre pour une durée déterminée.' },
+      { name: '🧹 Clear', value: 'Supprime un nombre défini de messages dans le salon actuel.' },
+    )
+    .setFooter({ text: `Panel Admin • ${guildName}` })
+    .setTimestamp();
+}
+
+function buildHelpMembresEmbed(guildName: string): EmbedBuilder {
+  return new EmbedBuilder()
+    .setTitle('ℹ️  Aide — Panel Membres')
+    .setColor(0x57f287)
+    .setDescription('Voici les fonctionnalités disponibles dans le Panel Membres.')
+    .addFields(
+      { name: '📈 Mon niveau', value: 'Affiche ton niveau, ton XP actuel et ta progression.' },
+      { name: '🌐 Dashboard', value: 'Accède au tableau de bord du serveur en ligne.' },
+      { name: '🏓 Ping', value: "Affiche la latence du bot et de l'API Discord." },
+    )
+    .setFooter({ text: `Panel Membres • ${guildName}` })
+    .setTimestamp();
+}
+
+function buildWarnModal(): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId('modal_warn')
+    .setTitle('⚠️ Avertir un membre')
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId('membre_id')
+          .setLabel('ID ou @mention du membre')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true),
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId('raison')
+          .setLabel('Raison')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true),
+      ),
+    );
+}
+
+function buildKickModal(): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId('modal_kick')
+    .setTitle('👢 Expulser un membre')
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId('membre_id')
+          .setLabel('ID ou @mention du membre')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true),
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId('raison')
+          .setLabel('Raison (optionnel)')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(false),
+      ),
+    );
+}
+
+function buildBanModal(): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId('modal_ban')
+    .setTitle('🔨 Bannir un membre')
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId('membre_id')
+          .setLabel('ID ou @mention du membre')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true),
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId('raison')
+          .setLabel('Raison (optionnel)')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(false),
+      ),
+    );
+}
+
+function buildMuteModal(): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId('modal_mute')
+    .setTitle('🔇 Rendre muet un membre')
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId('membre_id')
+          .setLabel('ID ou @mention du membre')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true),
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId('duree')
+          .setLabel('Durée (ex : 10m, 2h, 1d)')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true),
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId('raison')
+          .setLabel('Raison (optionnel)')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(false),
+      ),
+    );
+}
+
+function buildClearModal(): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId('modal_clear')
+    .setTitle('🧹 Supprimer des messages')
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId('nombre')
+          .setLabel('Nombre de messages à supprimer (1–1 000 000)')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true),
+      ),
+    );
+}
+
 export default {
   name: Events.InteractionCreate,
   async execute(interaction: Interaction, client: Client) {
