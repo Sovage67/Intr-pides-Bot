@@ -11,8 +11,72 @@ import {
   PermissionFlagsBits,
   ChannelType,
   MessageFlags,
+  type Guild,
+  type TextChannel,
 } from 'discord.js';
 import { prisma } from '../../lib/prisma.js';
+
+// ── Poster le panel depuis le dashboard (appelé via Redis) ────────────────────
+export async function postTicketPanel(guild: Guild, channelId: string): Promise<{ ok: boolean; error?: string }> {
+  const cfg = await prisma.ticketConfig.findUnique({
+    where: { guildId: guild.id },
+    include: { categories: { orderBy: { order: 'asc' } } },
+  });
+
+  if (!cfg?.enabled) return { ok: false, error: 'Module Tickets désactivé.' };
+  if (cfg.actionType === 'selector' && !cfg.categories.length) return { ok: false, error: 'Aucune raison configurée.' };
+
+  const colorHex = parseInt((cfg.panelColor ?? '#57F287').replace('#', ''), 16);
+  const embed = new EmbedBuilder()
+    .setTitle(cfg.panelTitle || '🎫 Ouvrir un ticket')
+    .setDescription(cfg.panelDescription || 'Sélectionnez le type de votre demande dans le menu ci-dessous.')
+    .setColor(isNaN(colorHex) ? 0x57f287 : colorHex)
+    .setTimestamp();
+
+  if (cfg.panelAuthor) embed.setAuthor({ name: cfg.panelAuthor });
+  if (cfg.panelFooter) embed.setFooter({ text: cfg.panelFooter });
+  else embed.setFooter({ text: guild.name, iconURL: guild.iconURL() ?? undefined });
+  if (cfg.panelImage) embed.setImage(cfg.panelImage);
+  if (cfg.panelThumbnail) embed.setThumbnail(cfg.panelThumbnail);
+
+  let component: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>;
+
+  if (cfg.actionType === 'button') {
+    const btn = new ButtonBuilder()
+      .setCustomId('ticket:open:0')
+      .setLabel(cfg.buttonLabel || 'Ouvrir un ticket')
+      .setStyle(ButtonStyle.Success);
+    component = new ActionRowBuilder<ButtonBuilder>().addComponents(btn);
+  } else {
+    const select = new StringSelectMenuBuilder()
+      .setCustomId('ticket:select_category')
+      .setPlaceholder('📋 Choisir le type de votre demande...')
+      .addOptions(
+        cfg.categories.map((cat: { id: number; emoji: string; label: string; description: string }) =>
+          new StringSelectMenuOptionBuilder()
+            .setLabel(cat.label)
+            .setDescription(cat.description || `Ouvrir un ticket ${cat.label}`)
+            .setValue(String(cat.id))
+            .setEmoji(cat.emoji),
+        ),
+      );
+    component = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+  }
+
+  try {
+    const channel = await guild.channels.fetch(channelId) as TextChannel | null;
+    if (!channel || !('send' in channel)) return { ok: false, error: 'Salon introuvable ou non textuel.' };
+
+    const msg = await channel.send({ embeds: [embed], components: [component] });
+    await prisma.ticketConfig.update({
+      where: { guildId: guild.id },
+      data: { panelChannelId: channelId, panelMessageId: msg.id },
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
 
 export default {
   data: new SlashCommandBuilder()
@@ -42,84 +106,6 @@ export default {
     if (!guild) return;
 
     const sub = interaction.options.getSubcommand();
-
-    // ── /ticket panel ──────────────────────────────────────────────────────
-    if (sub === 'panel') {
-      if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-        await interaction.reply({ content: '❌ Tu dois avoir la permission **Gérer le serveur** pour utiliser cette commande.', flags: MessageFlags.Ephemeral });
-        return;
-      }
-
-      const cfg = await prisma.ticketConfig.findUnique({
-        where: { guildId: guild.id },
-        include: { categories: { orderBy: { order: 'asc' } } },
-      });
-
-      if (!cfg?.enabled) {
-        await interaction.reply({ content: '❌ Le module Tickets n\'est pas activé. Configure-le sur le dashboard.', flags: MessageFlags.Ephemeral });
-        return;
-      }
-
-      // Vérification selon actionType
-      if (cfg.actionType === 'selector' && !cfg.categories.length) {
-        await interaction.reply({ content: '❌ Aucune raison configurée dans le sélecteur. Ajoute-en une sur le dashboard.', flags: MessageFlags.Ephemeral });
-        return;
-      }
-
-      // Construire l'embed depuis la config
-      const colorHex = parseInt((cfg.panelColor ?? '#57F287').replace('#', ''), 16);
-      const embed = new EmbedBuilder()
-        .setTitle(cfg.panelTitle || '🎫 Ouvrir un ticket')
-        .setDescription(cfg.panelDescription || 'Sélectionnez le type de votre demande dans le menu ci-dessous.')
-        .setColor(isNaN(colorHex) ? 0x57f287 : colorHex)
-        .setTimestamp();
-
-      if (cfg.panelAuthor) embed.setAuthor({ name: cfg.panelAuthor });
-      if (cfg.panelFooter) embed.setFooter({ text: cfg.panelFooter });
-      else embed.setFooter({ text: guild.name, iconURL: guild.iconURL() ?? undefined });
-      if (cfg.panelImage) embed.setImage(cfg.panelImage);
-      if (cfg.panelThumbnail) embed.setThumbnail(cfg.panelThumbnail);
-
-      let component: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>;
-
-      if (cfg.actionType === 'button') {
-        // Un seul bouton — ouvre directement sans catégorie
-        const btn = new ButtonBuilder()
-          .setCustomId('ticket:open:0')
-          .setLabel(cfg.buttonLabel || 'Ouvrir un ticket')
-          .setStyle(ButtonStyle.Success);
-        component = new ActionRowBuilder<ButtonBuilder>().addComponents(btn);
-      } else {
-        // Sélecteur avec raisons
-        const select = new StringSelectMenuBuilder()
-          .setCustomId('ticket:select_category')
-          .setPlaceholder('📋 Choisir le type de votre demande...')
-          .addOptions(
-            cfg.categories.map((cat: { id: number; emoji: string; label: string; description: string }) =>
-              new StringSelectMenuOptionBuilder()
-                .setLabel(cat.label)
-                .setDescription(cat.description || `Ouvrir un ticket ${cat.label}`)
-                .setValue(String(cat.id))
-                .setEmoji(cat.emoji),
-            ),
-          );
-        component = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
-      }
-
-      const ch = interaction.channel;
-      const msg = ch && 'send' in ch ? await (ch as import('discord.js').TextChannel).send({ embeds: [embed], components: [component] }) : null;
-
-      // Sauvegarder l'ID du panel
-      if (msg) {
-        await prisma.ticketConfig.update({
-          where: { guildId: guild.id },
-          data: { panelChannelId: interaction.channelId, panelMessageId: msg.id },
-        });
-      }
-
-      await interaction.reply({ content: '✅ Panel de tickets posté avec succès !', flags: MessageFlags.Ephemeral });
-      return;
-    }
 
     // ── /ticket close ──────────────────────────────────────────────────────
     if (sub === 'close') {

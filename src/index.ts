@@ -10,6 +10,7 @@ import { redis, redisSub } from './lib/redis.js';
 import { prisma } from './lib/prisma.js';
 import { startBotServer } from './server.js';
 import type { SlashCommand } from './lib/types.js';
+import { postTicketPanel } from './commands/utility/ticket.js';
 
 declare module 'discord.js' {
   export interface Client {
@@ -73,16 +74,35 @@ async function loadEvents() {
 }
 
 async function setupRedisPubSub() {
-  await redisSub.subscribe('guild:update');
+  await redisSub.subscribe('guild:update', 'antiinsulte:update', 'antiraid:update', 'arrivees:update', 'tickets:post-panel');
   redisSub.on('message', (channel: string, message: string) => {
-    if (channel === 'guild:update') {
-      try {
-        const data = JSON.parse(message);
+    try {
+      const data = JSON.parse(message);
+      if (channel === 'guild:update') {
         logger.info({ data }, 'Mise à jour reçue depuis le dashboard');
         redis.del(`guild:${data.guildId}`).catch(() => {});
-      } catch (err) {
-        logger.error({ err }, 'Erreur parsing message Redis');
+      } else if (channel === 'antiinsulte:update') {
+        logger.info({ data }, 'Config anti-insulte mise à jour');
+        redis.set(`antiinsulte:invalidate:${data.guildId}`, '1', 'EX', 60).catch(() => {});
+      } else if (channel === 'antiraid:update') {
+        logger.info({ data }, 'Config anti-raid mise à jour');
+        redis.set(`antiraid:invalidate:${data.guildId}`, '1', 'EX', 60).catch(() => {});
+      } else if (channel === 'arrivees:update') {
+        logger.info({ data }, 'Config arrivées & départs mise à jour');
+        redis.set(`arrivees:invalidate:${data.guildId}`, '1', 'EX', 60).catch(() => {});
+      } else if (channel === 'tickets:post-panel') {
+        logger.info({ data }, 'Poster panel tickets demandé depuis le dashboard');
+        const guild = client.guilds.cache.get(data.guildId);
+        if (!guild) { logger.warn({ guildId: data.guildId }, 'Guild introuvable pour post-panel'); return; }
+        postTicketPanel(guild, data.channelId)
+          .then(result => {
+            if (!result.ok) logger.error({ result }, 'Erreur postTicketPanel');
+            else logger.info({ guildId: data.guildId }, 'Panel tickets posté avec succès');
+          })
+          .catch(err => logger.error({ err }, 'Erreur postTicketPanel'));
       }
+    } catch (err) {
+      logger.error({ err }, 'Erreur parsing message Redis');
     }
   });
 }
@@ -101,24 +121,17 @@ function setupShutdown() {
 }
 
 async function main() {
-  try {
-    await loadCommands();
-    await loadEvents();
-    await setupRedisPubSub();
-    setupShutdown();
-
-    const token = process.env.DISCORD_TOKEN;
-    if (!token) throw new Error('DISCORD_TOKEN manquant dans .env');
-
-    // Serveur HTTP pour UptimeRobot (empêche Render free tier de mettre en veille)
-    const httpPort = Number(process.env.PORT ?? process.env.BOT_HTTP_PORT ?? 3002);
-    startBotServer(client, httpPort);
-
-    await client.login(token);
-  } catch (err) {
-    logger.fatal({ err }, 'Erreur au démarrage du bot');
-    process.exit(1);
-  }
+  await loadCommands();
+  await loadEvents();
+  await setupRedisPubSub();
+  setupShutdown();
+  const token = process.env.DISCORD_TOKEN;
+  if (!token) throw new Error('DISCORD_TOKEN manquant');
+  await client.login(token);
+  startBotServer(client);
 }
 
-main();
+main().catch(err => {
+  logger.error(err, 'Erreur fatale');
+  process.exit(1);
+});
