@@ -123,6 +123,7 @@ model MemberLog {
 
   @@index([guildId, userId])
   @@index([userId, createdAt])
+  @@index([guildId, type, createdAt])
 }
 
 model Subscription {
@@ -171,4 +172,193 @@ model GuildRiskScore {
   computedAt DateTime @default(now())
 
   @@index([flagged, score])
+}
+
+model MessageActivity {
+  id      Int      @id @default(autoincrement())
+  guildId String
+  bucket  DateTime // Tronqué à l'heure UTC
+  count   Int      @default(0)
+
+  @@unique([guildId, bucket])
+  @@index([guildId, bucket])
+}
+
+model ReactionActivity {
+  id      Int      @id @default(autoincrement())
+  guildId String
+  bucket  DateTime // Tronqué à l'heure UTC
+  count   Int      @default(0)
+
+  @@unique([guildId, bucket])
+  @@index([guildId, bucket])
+}
+
+model AntiRaidConfig {
+  id             Int      @id @default(autoincrement())
+  guildId        String   @unique
+  enabled        Boolean  @default(false)
+  joinEnabled    Boolean  @default(true)
+  joinThreshold  Int      @default(8)
+  joinWindow     Int      @default(3)
+  suspectEnabled Boolean  @default(true)
+  minAccountAge  Int      @default(7)
+  botApiEnabled  Boolean  @default(true)
+  linkEnabled    Boolean  @default(true)
+  linkThreshold  Int      @default(3)
+  linkWindow     Int      @default(5)
+  banPurgeDays   Int      @default(1)
+  logChannelId   String?
+  modPingRoleId  String?
+  updatedAt      DateTime @updatedAt
+
+  @@index([guildId])
+}
+
+model AntiRaidLog {
+  id         Int      @id @default(autoincrement())
+  guildId    String
+  type       String
+  userId     String
+  username   String
+  accountAge Int?
+  action     String
+  detail     String?
+  createdAt  DateTime @default(now())
+
+  @@index([guildId, createdAt])
+  @@index([guildId, userId])
+}
+
+model AntiInsulteLog {
+  id             Int      @id @default(autoincrement())
+  guildId        String
+  userId         String
+  username       String
+  word           String
+  action         String
+  messageContent String
+  createdAt      DateTime @default(now())
+
+  @@index([guildId, createdAt])
+  @@index([guildId, userId])
+}
+
+model TraductionConfig {
+  id           Int      @id @default(autoincrement())
+  guildId      String   @unique
+  enabled      Boolean  @default(false)
+  targetLang   String   @default("fr")
+  mode         String   @default("reply")      // reply | embed
+  channelMode  String   @default("all")         // all | whitelist | blacklist
+  channels     String[]
+  skipSameLang Boolean  @default(true)
+  updatedAt    DateTime @updatedAt
+
+  @@index([guildId])
+}
+
+model ArriveesDepartsConfig {
+  id              Int      @id @default(autoincrement())
+  guildId         String   @unique
+  // Bienvenue
+  autoRoleEnabled Boolean  @default(false)
+  autoRoleId      String?
+  welcomeEnabled  Boolean  @default(false)
+  welcomeChannel  String?
+  welcomeMessage  String   @default("Bienvenue {user.mention} sur {server.name} !")
+  welcomeFormat   String   @default("embed")   // text | embed
+  welcomeMention  Boolean  @default(true)
+  // Au revoir
+  goodbyeEnabled  Boolean  @default(false)
+  goodbyeChannel  String?
+  goodbyeMessage  String   @default("😢 {user.username} vient de quitter {server.name}...")
+  goodbyeFormat   String   @default("embed")   // text | embed
+  welcomeImageUrl String?                       // URL image embed bienvenue
+  goodbyeImageUrl String?                       // URL image embed au revoir
+  updatedAt       DateTime @updatedAt
+
+  @@index([guildId])
+}
+
+model AntiInsulteConfig {
+  id              Int      @id @default(autoincrement())
+  guildId         String   @unique
+  enabled         Boolean  @default(false)
+  words                String[]
+  removedDefaultWords  String[]
+  action          String   @default("delete") // delete | warn | timeout | kick
+  timeoutDuration Int      @default(300)
+  kickAfterWarns  Int      @default(3)        // nb d'avertissements avant kick (1-5)
+  warnMaxCount    Int      @default(1)
+  warnMessages    String[]
+  warnDm          Boolean  @default(true)
+  exemptRoles     String[]
+  exemptChannels  String[]
+  logChannelId    String?
+  modPingRoleId   String?
+  updatedAt       DateTime @updatedAt
+
+  @@index([guildId])
+}
+
+model TicketConfig {
+  id              Int              @id @default(autoincrement())
+  guildId         String           @unique
+  enabled         Boolean          @default(false)
+  logChannelId    String?
+  modRoles        String[]
+  maxPerMember    Int              @default(1)
+  mentionMods     Boolean          @default(true)
+  askCloseReason  Boolean          @default(false)
+  autoDelete      Boolean          @default(true)
+  autoDeleteDelay Int              @default(0)
+  transcription   Boolean          @default(true)
+  channelFormat   String           @default("{type}-{username}")
+  panelChannelId  String?
+  panelMessageId  String?
+  updatedAt       DateTime         @updatedAt
+  categories      TicketCategory[]
+
+  @@index([guildId])
+}
+
+model TicketCategory {
+  id          Int      @id @default(autoincrement())
+  guildId     String
+  label       String
+  emoji       String   @default("🎫")
+  description String   @default("")
+  categoryId  String?
+  welcomeMsg  String   @default("Bonjour {user.mention} ! Un modérateur va vous répondre rapidement.")
+  askReason   Boolean  @default(false)
+  order       Int      @default(0)
+  configId    Int
+  config      TicketConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  tickets     Ticket[]
+
+  @@index([guildId])
+  @@index([configId])
+}
+
+model Ticket {
+  id          Int             @id @default(autoincrement())
+  guildId     String
+  channelId   String          @unique
+  userId      String
+  username    String
+  categoryId  Int?
+  category    TicketCategory? @relation(fields: [categoryId], references: [id])
+  reason      String?
+  closeReason String?
+  closedBy    String?
+  closedByName String?
+  status      String          @default("open")
+  transcript  String?
+  createdAt   DateTime        @default(now())
+  closedAt    DateTime?
+
+  @@index([guildId, status])
+  @@index([guildId, userId])
+  @@index([guildId, createdAt])
 }
