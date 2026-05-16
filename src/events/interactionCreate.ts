@@ -12,188 +12,122 @@ import {
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   ChannelType,
+  PermissionFlagsBits,
   MessageFlags,
 } from 'discord.js';
 import { logger } from '../lib/logger.js';
 import { redis } from '../lib/redis.js';
 import { prisma } from '../lib/prisma.js';
+import { closeTicket } from '../commands/utility/ticket.js';
 
-// ─── Utilitaires ─────────────────────────────────────────────────────────────
 
-function xpForLevel(level: number): number {
-  return 5 * level * level + 50 * level + 100;
+// ─── Helper : ouvrir un ticket ───────────────────────────────────────────────
+async function handleTicketOpen(
+  interaction: import('discord.js').StringSelectMenuInteraction | import('discord.js').ButtonInteraction,
+  categoryId: number,
+) {
+  const { guild, user } = interaction;
+  if (!guild) return;
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  try {
+    const cfg = await prisma.ticketConfig.findUnique({
+      where: { guildId: guild.id },
+      include: { categories: true },
+    });
+
+    if (!cfg?.enabled) {
+      await interaction.editReply({ content: '❌ Le module Tickets est désactivé.' });
+      return;
+    }
+
+    // Vérifier le max de tickets par membre
+    const openCount = await prisma.ticket.count({
+      where: { guildId: guild.id, userId: user.id, status: 'open' },
+    });
+    if (openCount >= cfg.maxPerMember) {
+      await interaction.editReply({ content: `❌ Tu as déjà **${openCount}** ticket(s) ouvert(s). Ferme-les avant d'en ouvrir un nouveau.` });
+      return;
+    }
+
+    // Récupérer la raison (null si bouton simple)
+    const cat = cfg.categories.find((c: { id: number; emoji: string; label: string; description: string }) => c.id === categoryId) ?? null;
+    const catLabel = cat ? `${cat.emoji} ${cat.label}` : '🎫 Ticket';
+
+    // Formater le nom du salon
+    const slug = (cat?.label ?? 'ticket').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const userSlug = user.username.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    const channelName = `ticket-${slug}-${userSlug}`.slice(0, 100);
+
+    // Créer le salon
+    const ticketChannel = await guild.channels.create({
+      name: channelName,
+      type: ChannelType.GuildText,
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+        { id: guild.client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory] },
+        ...cfg.modRoles.map((roleId: string) => ({
+          id: roleId,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+        })),
+      ],
+    });
+
+    // Créer le ticket en DB
+    const ticket = await prisma.ticket.create({
+      data: {
+        guildId: guild.id,
+        channelId: ticketChannel.id,
+        userId: user.id,
+        username: user.username,
+        categoryId: cat?.id ?? null,
+        status: 'open',
+      },
+    });
+
+    // Bouton fermeture
+    const closeBtn = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('ticket:close')
+        .setLabel('🔒 Fermer le ticket')
+        .setStyle(ButtonStyle.Danger),
+    );
+
+    // Embed de bienvenue dans le salon ticket
+    const welcomeEmbed = new EmbedBuilder()
+      .setTitle(`${catLabel} — Ticket #${ticket.id}`)
+      .setDescription(`Bienvenue <@${user.id}> ! Un modérateur va te répondre dès que possible.`)
+      .setColor(0x57f287)
+      .setFooter({ text: `Ticket ouvert par ${user.username}` })
+      .setTimestamp();
+
+    // Mention des rôles mods
+    const modMentions = cfg.modRoles.length
+      ? cfg.modRoles.map((r: string) => `<@&${r}>`).join(' ')
+      : null;
+
+    await ticketChannel.send({
+      content: modMentions ?? undefined,
+      embeds: [welcomeEmbed],
+      components: [closeBtn],
+    });
+
+    await interaction.editReply({ content: `✅ Ton ticket a été ouvert : <#${ticketChannel.id}>` });
+  } catch (err) {
+    logger.error({ err }, 'Erreur création ticket');
+    await interaction.editReply({ content: '❌ Une erreur est survenue lors de la création du ticket.' });
+  }
 }
 
-/** Extrait un ID Discord depuis un texte (ID brut ou <@123> / <@!123>) */
-function parseUserId(input: string): string | null {
-  const mention = input.trim().match(/^<@!?(\d+)>$/);
+// Helper : extraire un Discord ID depuis une saisie brute ou une @mention
+function parseUserId(raw: string): string | null {
+  const mention = raw.match(/^<@!?(\d{17,19})>$/);
   if (mention) return mention[1]!;
-  if (/^\d{17,20}$/.test(input.trim())) return input.trim();
+  if (/^\d{17,19}$/.test(raw.trim())) return raw.trim();
   return null;
 }
-
-// ─── Builders de Modals (Panel Admin) ───────────────────────────────────────
-
-function buildWarnModal(): ModalBuilder {
-  return new ModalBuilder()
-    .setCustomId('modal_warn')
-    .setTitle('⚠️ Avertir un membre')
-    .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-          .setCustomId('membre_id')
-          .setLabel('ID ou @mention du membre')
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder('123456789012345678 ou <@123456789>')
-          .setRequired(true),
-      ),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-          .setCustomId('raison')
-          .setLabel('Raison de l\'avertissement')
-          .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder('Comportement inapproprié...')
-          .setRequired(true),
-      ),
-    );
-}
-
-function buildKickModal(): ModalBuilder {
-  return new ModalBuilder()
-    .setCustomId('modal_kick')
-    .setTitle('👢 Expulser un membre')
-    .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-          .setCustomId('membre_id')
-          .setLabel('ID ou @mention du membre')
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder('123456789012345678 ou <@123456789>')
-          .setRequired(true),
-      ),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-          .setCustomId('raison')
-          .setLabel('Raison (optionnel)')
-          .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder('Aucune raison fournie')
-          .setRequired(false),
-      ),
-    );
-}
-
-function buildBanModal(): ModalBuilder {
-  return new ModalBuilder()
-    .setCustomId('modal_ban')
-    .setTitle('🔨 Bannir un membre')
-    .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-          .setCustomId('membre_id')
-          .setLabel('ID ou @mention du membre')
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder('123456789012345678 ou <@123456789>')
-          .setRequired(true),
-      ),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-          .setCustomId('raison')
-          .setLabel('Raison (optionnel)')
-          .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder('Aucune raison fournie')
-          .setRequired(false),
-      ),
-    );
-}
-
-function buildMuteModal(): ModalBuilder {
-  return new ModalBuilder()
-    .setCustomId('modal_mute')
-    .setTitle('🔇 Rendre un membre muet')
-    .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-          .setCustomId('membre_id')
-          .setLabel('ID ou @mention du membre')
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder('123456789012345678 ou <@123456789>')
-          .setRequired(true),
-      ),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-          .setCustomId('duree')
-          .setLabel('Durée  (ex: 10m · 2h · 1d · 7d)')
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder('30m')
-          .setRequired(true),
-      ),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-          .setCustomId('raison')
-          .setLabel('Raison (optionnel)')
-          .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder('Aucune raison fournie')
-          .setRequired(false),
-      ),
-    );
-}
-
-
-function buildClearModal(): ModalBuilder {
-  return new ModalBuilder()
-    .setCustomId('modal_clear')
-    .setTitle('🧹 Supprimer des messages')
-    .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-          .setCustomId('nombre')
-          .setLabel('Nombre de messages à supprimer (1–1 000 000)')
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder('Ex : 500')
-          .setRequired(true),
-      ),
-    );
-}
-
-// ─── Embeds d'aide ───────────────────────────────────────────────────────────
-
-function buildHelpAdminsEmbed(guildName: string): EmbedBuilder {
-  return new EmbedBuilder()
-    .setTitle('📖  Aide — Commandes Admin')
-    .setDescription(
-      'Toutes les commandes disponibles dans le **Panel Administrateur**.\n' +
-      'Utilisez le menu déroulant du panel pour les exécuter.',
-    )
-    .setColor(0xed4245)
-    .addFields(
-      { name: '⚠️  Warn', value: 'Avertit un membre et enregistre l\'avertissement en base de données.' },
-      { name: '👢  Kick', value: 'Expulse un membre du serveur.' },
-      { name: '🧹  Clear', value: 'Supprime entre 1 et 1 000 000 messages dans le salon actuel.' },
-      { name: '🔨  Ban', value: 'Bannit définitivement un membre du serveur.' },
-      { name: '🔇  Mute', value: 'Rend un membre muet temporairement (10m, 2h, 1d… max 28j).' },
-      { name: '🏓  Ping', value: 'Affiche la latence du bot et de l\'API Discord.' },
-    )
-    .setFooter({ text: `Panel Admin • ${guildName}` })
-    .setTimestamp();
-}
-
-function buildHelpMembresEmbed(guildName: string): EmbedBuilder {
-  return new EmbedBuilder()
-    .setTitle('❓  Aide — Commandes Membres')
-    .setDescription(
-      'Toutes les commandes disponibles dans le **Panel Membres**.\n' +
-      'Utilisez le menu déroulant du panel pour les exécuter.',
-    )
-    .setColor(0x57f287)
-    .addFields(
-      { name: '🏓  Ping', value: 'Affiche la latence du bot et de l\'API Discord.' },
-      { name: '📈  Level', value: 'Affiche ton niveau actuel et ta progression XP.' },
-    )
-    .setFooter({ text: `Panel Membres • ${guildName}` })
-    .setTimestamp();
-}
-
-// ─── Handler principal ───────────────────────────────────────────────────────
 
 export default {
   name: Events.InteractionCreate,
@@ -603,6 +537,13 @@ export default {
         return;
       }
 
+      // ── TICKET SELECT CATEGORY ──────────────────────────────────────────
+      if (customId === 'ticket:select_category') {
+        const categoryId = parseInt(values[0]!, 10);
+        await handleTicketOpen(interaction, categoryId);
+        return;
+      }
+
       return;
     }
 
@@ -610,6 +551,21 @@ export default {
     // 3. BOUTON — Retour Panel Admin
     // ════════════════════════════════════════════════════════════════════════
     if (interaction.isButton()) {
+      // ── TICKET OPEN (bouton direct catégorie unique) ──────────────────────
+      if (interaction.customId.startsWith('ticket:open:')) {
+        const categoryId = parseInt(interaction.customId.split(':')[2]!, 10);
+        await handleTicketOpen(interaction, categoryId);
+        return;
+      }
+
+      // ── TICKET CLOSE ──────────────────────────────────────────────────────
+      if (interaction.customId === 'ticket:close') {
+        if (!interaction.guild) return;
+        // @ts-ignore
+        await closeTicket(interaction, interaction.guild.id, null);
+        return;
+      }
+
       if (interaction.customId === 'btn_back_admin') {
         const { guild } = interaction;
         if (!guild || interaction.user.id !== guild.ownerId) {
