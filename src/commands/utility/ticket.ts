@@ -179,30 +179,6 @@ export async function closeTicket(
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  // Générer la transcription si activée
-  let transcript: string | null = null;
-  if (cfg.transcription && channel.type === ChannelType.GuildText) {
-    try {
-      const messages = await channel.messages.fetch({ limit: 100 });
-      const sorted = [...messages.values()].reverse();
-      const lines = sorted.map(m => {
-        const time = m.createdAt.toLocaleString('fr-FR');
-        const content = m.content || (m.embeds.length ? '[Embed]' : '[Attachment]');
-        return `<tr><td>${time}</td><td><b>${m.author.username}</b></td><td>${content}</td></tr>`;
-      });
-      transcript = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket #${ticket.id}</title>
-<style>body{font-family:sans-serif;background:#2f3136;color:#dcddde;padding:20px}
-table{width:100%;border-collapse:collapse}td{padding:6px 10px;border-bottom:1px solid #40444b}
-tr:nth-child(even){background:#36393f}</style></head>
-<body><h2>🎫 Ticket #${ticket.id} — ${ticket.username}</h2>
-<p>Ouvert le ${ticket.createdAt.toLocaleString('fr-FR')} | Fermé le ${new Date().toLocaleString('fr-FR')}</p>
-<table><thead><tr><th>Heure</th><th>Auteur</th><th>Message</th></tr></thead>
-<tbody>${lines.join('')}</tbody></table></body></html>`;
-    } catch {
-      // silencieux
-    }
-  }
-
   // Mettre à jour la DB
   await prisma.ticket.update({
     where: { id: ticket.id },
@@ -212,47 +188,8 @@ tr:nth-child(even){background:#36393f}</style></head>
       closedByName: interaction.user.username,
       closeReason: raison,
       closedAt: new Date(),
-      transcript,
     },
   });
-
-  // Log dans le salon de logs
-  if (cfg.logChannelId) {
-    try {
-      const logChannel = await guild.channels.fetch(cfg.logChannelId);
-      if (logChannel?.type === ChannelType.GuildText) {
-        const logEmbed = new EmbedBuilder()
-          .setTitle(`🔒 Ticket #${ticket.id} fermé`)
-          .setColor(0xed4245)
-          .addFields(
-            { name: '👤 Ouvreur', value: `<@${ticket.userId}> (${ticket.username})`, inline: true },
-            { name: '🛡️ Fermé par', value: `<@${interaction.user.id}>`, inline: true },
-            { name: '📝 Raison', value: raison ?? 'Aucune raison fournie', inline: false },
-            { name: '📅 Ouvert le', value: ticket.createdAt.toLocaleString('fr-FR'), inline: true },
-            { name: '📅 Fermé le', value: new Date().toLocaleString('fr-FR'), inline: true },
-          )
-          .setFooter({ text: `Ticket ID: ${ticket.id}` })
-          .setTimestamp();
-        await logChannel.send({ embeds: [logEmbed] });
-      }
-    } catch {
-      // silencieux
-    }
-  }
-
-  // Envoyer la transcription en DM à l'ouvreur
-  if (transcript) {
-    try {
-      const opener = await guild.client.users.fetch(ticket.userId);
-      const buf = Buffer.from(transcript, 'utf-8');
-      await opener.send({
-        content: `📄 Voici la transcription de ton ticket **#${ticket.id}** sur **${guild.name}**.`,
-        files: [{ attachment: buf, name: `ticket-${ticket.id}.html` }],
-      });
-    } catch {
-      // silencieux si DMs fermés
-    }
-  }
 
   await interaction.editReply({ content: '✅ Ticket fermé. Le salon sera supprimé dans quelques secondes.' });
 

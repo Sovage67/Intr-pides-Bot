@@ -128,7 +128,7 @@ async function main() {
   const token = process.env.DISCORD_TOKEN;
   if (!token) throw new Error('DISCORD_TOKEN manquant');
   await client.login(token);
-  startBotServer(client);
+  startBotServer(client, Number(process.env.PORT) || 3001);
 }
 
 main().catch(err => {
