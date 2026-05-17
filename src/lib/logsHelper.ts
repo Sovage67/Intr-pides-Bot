@@ -1,6 +1,6 @@
 import { Client, EmbedBuilder, TextChannel } from 'discord.js';
-import { prisma } from './prisma';
-import { redis } from './redis';
+import { prisma } from './prisma.js';
+import { redis } from './redis.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
