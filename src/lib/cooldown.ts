@@ -16,7 +16,7 @@ export async function checkCooldown(
 ): Promise<number | null> {
   const key = `cooldown:${commandName}:${userId}`;
   // SET NX EX : atomique — pas de race condition entre le check et le set
-  const claimed = await redis.set(key, '1', { NX: true, EX: seconds });
+  const claimed = await redis.set(key, '1', 'EX', seconds, 'NX');
   if (claimed === 'OK') return null; // slot libre, cooldown posé
   // Déjà en cooldown → on renvoie le TTL restant
   const ttl = await redis.ttl(key);
@@ -35,7 +35,7 @@ export async function checkGuildCooldown(
   seconds: number,
 ): Promise<number | null> {
   const key = `cooldown:guild:${commandName}:${guildId}`;
-  const claimed = await redis.set(key, '1', { NX: true, EX: seconds });
+  const claimed = await redis.set(key, '1', 'EX', seconds, 'NX');
   if (claimed === 'OK') return null;
   const ttl = await redis.ttl(key);
   return ttl > 0 ? ttl : null;
