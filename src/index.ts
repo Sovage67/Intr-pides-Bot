@@ -74,7 +74,7 @@ async function loadEvents() {
 }
 
 async function setupRedisPubSub() {
-  await redisSub.subscribe('guild:update', 'antiinsulte:update', 'antiraid:update', 'arrivees:update', 'tickets:post-panel');
+  await redisSub.subscribe('guild:update', 'antiinsulte:update', 'antiraid:update', 'arrivees:update', 'tickets:post-panel', 'tickets:setup-logs-channel');
   redisSub.on('message', (channel: string, message: string) => {
     try {
       const data = JSON.parse(message);
@@ -100,6 +100,45 @@ async function setupRedisPubSub() {
             else logger.info({ guildId: data.guildId }, 'Panel tickets posté avec succès');
           })
           .catch(err => logger.error({ err }, 'Erreur postTicketPanel'));
+      } else if (channel === 'tickets:setup-logs-channel') {
+        logger.info({ data }, 'Création salon logs-tickets demandée');
+        const guild = client.guilds.cache.get(data.guildId);
+        if (!guild) { logger.warn({ guildId: data.guildId }, 'Guild introuvable pour setup-logs-channel'); return; }
+        (async () => {
+          try {
+            const { prisma: db } = await import('./lib/prisma.js');
+            const { ChannelType, PermissionFlagsBits } = await import('discord.js');
+            // Vérifier si un salon logs existe déjà dans cette catégorie
+            const existing = await db.ticketConfig.findUnique({ where: { guildId: data.guildId } });
+            if (existing?.logChannelId) {
+              const existingCh = guild.channels.cache.get(existing.logChannelId);
+              if (existingCh) { logger.info({ guildId: data.guildId }, 'Salon logs déjà existant, skip'); return; }
+            }
+            // Créer le salon #logs-tickets dans la catégorie
+            const logsChannel = await guild.channels.create({
+              name: 'logs-tickets',
+              type: ChannelType.GuildText,
+              parent: data.categoryId ?? undefined,
+              permissionOverwrites: [
+                { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+                { id: guild.client.user!.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+                // Les modRoles ont accès
+                ...(existing?.modRoles ?? []).map((roleId: string) => ({
+                  id: roleId,
+                  allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
+                })),
+              ],
+            });
+            // Sauvegarder logChannelId en DB
+            await db.ticketConfig.update({
+              where: { guildId: data.guildId },
+              data: { logChannelId: logsChannel.id },
+            });
+            logger.info({ guildId: data.guildId, channelId: logsChannel.id }, 'Salon logs-tickets créé avec succès');
+          } catch (err) {
+            logger.error({ err }, 'Erreur création salon logs-tickets');
+          }
+        })();
       }
     } catch (err) {
       logger.error({ err }, 'Erreur parsing message Redis');
