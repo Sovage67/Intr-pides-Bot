@@ -74,7 +74,7 @@ async function loadEvents() {
 }
 
 async function setupRedisPubSub() {
-  await redisSub.subscribe('guild:update', 'antiinsulte:update', 'antiraid:update', 'arrivees:update', 'tickets:post-panel', 'tickets:setup-logs-channel');
+  await redisSub.subscribe('guild:update', 'antiinsulte:update', 'antiraid:update', 'arrivees:update', 'tickets:post-panel', 'tickets:setup-logs-channel', 'bot-personnalise:update');
   redisSub.on('message', (channel: string, message: string) => {
     try {
       const data = JSON.parse(message);
@@ -137,6 +137,53 @@ async function setupRedisPubSub() {
             logger.info({ guildId: data.guildId, channelId: logsChannel.id }, 'Salon logs-tickets créé avec succès');
           } catch (err) {
             logger.error({ err }, 'Erreur création salon logs-tickets');
+          }
+        })();
+      } else if (channel === 'bot-personnalise:update') {
+        logger.info({ data }, 'Config bot personnalisé mise à jour');
+        const guild = client.guilds.cache.get(data.guildId);
+        if (!guild) return;
+        (async () => {
+          try {
+            const { ActivityType } = await import('discord.js');
+            const { prisma: db } = await import('./lib/prisma.js');
+
+            // Si le module vient d'être désactivé → reset surnom
+            if (data.enabled === false) {
+              await guild.members.me?.setNickname(null).catch(() => {});
+              logger.info({ guildId: data.guildId }, 'Bot Personnalisé désactivé — surnom réinitialisé');
+              return;
+            }
+
+            // Surnom
+            if ('nickname' in data) {
+              await guild.members.me?.setNickname(data.nickname ?? null).catch(() => {});
+            }
+
+            // Couleurs (stockées en DB uniquement, pas d'action Discord)
+            // avatarUrl : non appliqué automatiquement (limite Discord 2 changements/heure)
+
+            // Activité — relire la config complète pour avoir tous les champs à jour
+            const cfg = await db.botPersonnaliseConfig.findUnique({ where: { guildId: data.guildId } });
+            if (cfg?.enabled && cfg.activityText) {
+              const actTypeMap: Record<string, number> = {
+                PLAYING:   ActivityType.Playing,
+                WATCHING:  ActivityType.Watching,
+                LISTENING: ActivityType.Listening,
+                STREAMING: ActivityType.Streaming,
+                CUSTOM:    ActivityType.Custom,
+              };
+              client.user?.setPresence({
+                status: (cfg.status as 'online' | 'idle' | 'dnd' | 'invisible') ?? 'online',
+                activities: [{
+                  name: cfg.activityText,
+                  type: actTypeMap[cfg.activityType] ?? ActivityType.Playing,
+                  url:  cfg.streamUrl ?? undefined,
+                }],
+              });
+            }
+          } catch (err) {
+            logger.error({ err }, 'Erreur application bot personnalisé');
           }
         })();
       }

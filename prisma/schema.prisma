@@ -378,3 +378,24 @@ model Ticket {
   @@index([guildId, userId])
   @@index([guildId, createdAt])
 }
+
+model BotPersonnaliseConfig {
+  id            Int      @id @default(autoincrement())
+  guildId       String   @unique
+  enabled       Boolean  @default(false)
+  // Identité
+  nickname      String?
+  avatarUrl     String?
+  bio           String?
+  // Statut & activité
+  status        String   @default("online")     // online | idle | dnd | invisible
+  activityType  String   @default("PLAYING")    // PLAYING | WATCHING | LISTENING | STREAMING | CUSTOM
+  activityText  String?
+  streamUrl     String?
+  // Couleurs
+  profileColor  String   @default("#EB459E")
+  activityColor String   @default("#F0B232")
+  updatedAt     DateTime @updatedAt
+
+  @@index([guildId])
+}
