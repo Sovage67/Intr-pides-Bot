@@ -311,7 +311,7 @@ model TicketConfig {
   autoDelete       Boolean          @default(true)
   autoDeleteDelay  Int              @default(0)
   // Panel embed
-  panelTitle       String           @default("🎫 Ouvrir un ticket")
+  panelTitle       String           @default("🎫 Tickets")
   panelDescription String           @default("")
   panelColor       String           @default("#57F287")
   panelAuthor      String?
@@ -321,6 +321,7 @@ model TicketConfig {
   // Actionneur
   actionType       String           @default("selector")  // button | selector
   buttonLabel      String           @default("Ouvrir un ticket")
+  buttonStyle      String           @default("primary")  // primary | secondary | success | danger
   panelChannelId   String?
   panelMessageId   String?
   updatedAt        DateTime         @updatedAt

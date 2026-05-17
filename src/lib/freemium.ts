@@ -3,7 +3,7 @@
  *
  * Règle : 1 utilisateur Discord = 1 serveur gratuit. Au-delà → les autres
  * serveurs installés par ce même utilisateur sont "gelés" (modules premium
- * désactivés). Le Premium débloque jusqu'à 5 serveurs.
+ * désactivés). Le Premium débloque jusqu'à 3 serveurs.
  *
  * La détection se fait par `installerUserId` (lu dans l'audit log au moment
  * où le bot rejoint un serveur — voir events/guildCreate.ts).
@@ -15,7 +15,7 @@ import { logger } from './logger.js';
 /** Quota gratuit par utilisateur. */
 export const FREE_QUOTA = 1;
 /** Quota Premium par utilisateur. */
-export const PREMIUM_QUOTA = 5;
+export const PREMIUM_QUOTA = 3;
 
 /**
  * Compte les serveurs (NON gelés) installés par un même utilisateur.

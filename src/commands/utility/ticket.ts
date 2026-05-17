@@ -42,10 +42,16 @@ export async function postTicketPanel(guild: Guild, channelId: string): Promise<
   let component: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>;
 
   if (cfg.actionType === 'button') {
+    const styleMap: Record<string, ButtonStyle> = {
+      primary:   ButtonStyle.Primary,
+      secondary: ButtonStyle.Secondary,
+      success:   ButtonStyle.Success,
+      danger:    ButtonStyle.Danger,
+    };
     const btn = new ButtonBuilder()
       .setCustomId('ticket:open:0')
       .setLabel(cfg.buttonLabel || 'Ouvrir un ticket')
-      .setStyle(ButtonStyle.Success);
+      .setStyle(styleMap[cfg.buttonStyle ?? 'primary'] ?? ButtonStyle.Primary);
     component = new ActionRowBuilder<ButtonBuilder>().addComponents(btn);
   } else {
     const select = new StringSelectMenuBuilder()

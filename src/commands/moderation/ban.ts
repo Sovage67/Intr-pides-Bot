@@ -12,7 +12,7 @@ const command: SlashCommand = {
     .setDescription('Bannit un membre du serveur.')
     .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
     .addUserOption((opt) =>
-      opt.setName('membre').setDescription('Le membre à bannir').setRequired(true),
+      opt.setName('membre').setDescription('Le membre a bannir').setRequired(true),
     )
     .addStringOption((opt) =>
       opt.setName('raison').setDescription('La raison').setRequired(false),
@@ -20,26 +20,19 @@ const command: SlashCommand = {
     .addIntegerOption((opt) =>
       opt
         .setName('jours')
-        .setDescription('Nombre de jours de messages à supprimer (0-7)')
+        .setDescription('Nombre de jours de messages a supprimer (0-7)')
         .setMinValue(0)
         .setMaxValue(7),
     ),
   async execute(interaction) {
     if (!interaction.guild) {
-      await interaction.reply({
-        content: 'Cette commande doit être utilisée dans un serveur.',
-        ephemeral: true,
-      });
+      await interaction.reply({ content: 'Cette commande doit etre utilisee dans un serveur.', ephemeral: true });
       return;
     }
 
-    // Cooldown : 1 ban toutes les 5 secondes par modérateur
     const remaining = await checkCooldown(interaction.user.id, 'ban', 5);
     if (remaining) {
-      await interaction.reply({
-        content: `⏳ Cooldown actif, réessaie dans **${remaining}s**.`,
-        ephemeral: true,
-      });
+      await interaction.reply({ content: 'Cooldown actif, reessaie dans ' + remaining + 's.', ephemeral: true });
       return;
     }
 
@@ -49,25 +42,22 @@ const command: SlashCommand = {
 
     try {
       await interaction.guild.members.ban(target.id, {
-        reason: `${interaction.user.tag} : ${reason}`,
+        reason: interaction.user.tag + ' : ' + reason,
         deleteMessageSeconds: days * 86400,
       });
     } catch {
-      await interaction.reply({
-        content: 'Impossible de bannir ce membre.',
-        ephemeral: true,
-      });
+      await interaction.reply({ content: 'Impossible de bannir ce membre.', ephemeral: true });
       return;
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('🔨 Membre banni')
+      .setTitle('Membre banni')
       .setColor(0xed4245)
       .addFields(
-        { name: 'Membre', value: `${target.tag} (${target.id})` },
+        { name: 'Membre', value: target.tag + ' (' + target.id + ')' },
         { name: 'Raison', value: reason },
-        { name: 'Modérateur', value: `<@${interaction.user.id}>` },
-        { name: 'Messages supprimés', value: `${days} jour(s)` },
+        { name: 'Moderateur', value: '<@' + interaction.user.id + '>' },
+        { name: 'Messages supprimes', value: days + ' jour(s)' },
       )
       .setTimestamp();
 
