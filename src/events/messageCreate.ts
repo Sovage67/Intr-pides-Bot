@@ -87,6 +87,7 @@ async function translateWithLibreTranslate(text: string, targetLang: string): Pr
 }
 
 type BotModules = {
+  translation?: boolean;
   economy?: boolean;
   levels?: boolean;
   moderation?: boolean;
