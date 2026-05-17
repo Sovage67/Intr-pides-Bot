@@ -324,6 +324,17 @@ model TicketConfig {
   buttonStyle      String           @default("primary")  // primary | secondary | success | danger
   panelChannelId   String?
   panelMessageId   String?
+  // Options avancées
+  discordCategoryId       String?           // ID catégorie Discord où créer les salons tickets
+  logChannelId            String?           // Salon de logs des tickets fermés/supprimés
+  voiceEnabled            Boolean          @default(false)  // Créer un salon vocal à l'ouverture
+  pingRoleId              String?           // Rôle à mentionner à l'ouverture
+  welcomeMessageEnabled   Boolean          @default(false)  // Envoyer un message de bienvenue
+  welcomeMessage          String           @default("Bonjour {user.mention} ! Un modérateur va te répondre sous peu. Merci de patienter.")
+  // Message de fermeture
+  closeMessageEnabled     Boolean          @default(false)  // Envoyer un message à la fermeture
+  closeMessage            String           @default("Ton ticket a été fermé. Merci de nous avoir contacté !")
+  closeDmEnabled          Boolean          @default(false)  // Envoyer aussi en DM
   updatedAt        DateTime         @updatedAt
   categories       TicketCategory[]
 
@@ -346,21 +357,22 @@ model TicketCategory {
 }
 
 model Ticket {
-  id          Int             @id @default(autoincrement())
-  guildId     String
-  channelId   String          @unique
-  userId      String
-  username    String
-  categoryId  Int?
-  category    TicketCategory? @relation(fields: [categoryId], references: [id])
-  reason      String?
-  closeReason String?
-  closedBy    String?
-  closedByName String?
-  status      String          @default("open")
-  transcript   String?
-  createdAt    DateTime        @default(now())
-  closedAt     DateTime?
+  id             Int             @id @default(autoincrement())
+  guildId        String
+  channelId      String          @unique
+  userId         String
+  username       String
+  categoryId     Int?
+  category       TicketCategory? @relation(fields: [categoryId], references: [id])
+  reason         String?
+  closeReason    String?
+  closedBy       String?
+  closedByName   String?
+  status         String          @default("open")
+  transcript     String?
+  voiceChannelId String?         // Salon vocal auto (supprimé à la fermeture)
+  createdAt      DateTime        @default(now())
+  closedAt       DateTime?
 
   @@index([guildId, status])
   @@index([guildId, userId])

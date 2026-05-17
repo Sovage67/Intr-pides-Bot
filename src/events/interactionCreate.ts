@@ -60,20 +60,44 @@ async function handleTicketOpen(
     const userSlug = user.username.toLowerCase().replace(/[^a-z0-9-]/g, '');
     const channelName = `ticket-${slug}-${userSlug}`.slice(0, 100);
 
-    // Créer le salon
+    // Permissions communes aux mods
+    const modPermOverwrites = cfg.modRoles.map((roleId: string) => ({
+      id: roleId,
+      allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+    }));
+
+    // Créer le salon texte (dans la catégorie Discord si configurée)
     const ticketChannel = await guild.channels.create({
       name: channelName,
       type: ChannelType.GuildText,
+      parent: (cfg as unknown as { discordCategoryId: string | null }).discordCategoryId ?? undefined,
       permissionOverwrites: [
         { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
         { id: guild.client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory] },
-        ...cfg.modRoles.map((roleId: string) => ({
-          id: roleId,
-          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
-        })),
+        ...modPermOverwrites,
       ],
     });
+
+    // Créer le salon vocal si voiceEnabled
+    let voiceChannelId: string | null = null;
+    const cfgTyped = cfg as unknown as { discordCategoryId: string | null; voiceEnabled: boolean; pingRoleId: string | null; welcomeMessageEnabled: boolean; welcomeMessage: string; logChannelId: string | null };
+    if (cfgTyped.voiceEnabled) {
+      try {
+        const voiceChannel = await guild.channels.create({
+          name: `🔊 ticket-${userSlug}`.slice(0, 100),
+          type: ChannelType.GuildVoice,
+          parent: cfgTyped.discordCategoryId ?? undefined,
+          permissionOverwrites: [
+            { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+            { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak] },
+            { id: guild.client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels] },
+            ...modPermOverwrites,
+          ],
+        });
+        voiceChannelId = voiceChannel.id;
+      } catch { /* silencieux si manque de perms */ }
+    }
 
     // Créer le ticket en DB
     const ticket = await prisma.ticket.create({
@@ -84,6 +108,7 @@ async function handleTicketOpen(
         username: user.username,
         categoryId: cat?.id ?? null,
         status: 'open',
+        voiceChannelId,
       },
     });
 
@@ -95,24 +120,39 @@ async function handleTicketOpen(
         .setStyle(ButtonStyle.Danger),
     );
 
-    // Embed de bienvenue dans le salon ticket
-    const welcomeEmbed = new EmbedBuilder()
-      .setTitle(`${catLabel} — Ticket #${ticket.id}`)
-      .setDescription(`Bienvenue <@${user.id}> ! Un modérateur va te répondre dès que possible.`)
-      .setColor(0x57f287)
-      .setFooter({ text: `Ticket ouvert par ${user.username}` })
-      .setTimestamp();
+    // Contenu ping : pingRoleId prioritaire, sinon modRoles
+    const pingContent = cfgTyped.pingRoleId
+      ? `<@&${cfgTyped.pingRoleId}>`
+      : (cfg.modRoles.length ? cfg.modRoles.map((r: string) => `<@&${r}>`).join(' ') : null);
 
-    // Mention des rôles mods
-    const modMentions = cfg.modRoles.length
-      ? cfg.modRoles.map((r: string) => `<@&${r}>`).join(' ')
-      : null;
+    // Message de bienvenue personnalisé ou embed par défaut
+    if (cfgTyped.welcomeMessageEnabled && cfgTyped.welcomeMessage) {
+      const customMsg = cfgTyped.welcomeMessage
+        .replace(/{user\.mention}/g, `<@${user.id}>`)
+        .replace(/{server\.name}/g, guild.name)
+        .replace(/{ticket\.id}/g, String(ticket.id));
+      await ticketChannel.send({
+        content: (pingContent ? pingContent + '\n' : '') + customMsg,
+        components: [closeBtn],
+      });
+    } else {
+      const welcomeEmbed = new EmbedBuilder()
+        .setTitle(`${catLabel} — Ticket #${ticket.id}`)
+        .setDescription(`Bienvenue <@${user.id}> ! Un modérateur va te répondre dès que possible.`)
+        .setColor(0x57f287)
+        .setFooter({ text: `Ticket ouvert par ${user.username}` })
+        .setTimestamp();
+      await ticketChannel.send({
+        content: pingContent ?? undefined,
+        embeds: [welcomeEmbed],
+        components: [closeBtn],
+      });
+    }
 
-    await ticketChannel.send({
-      content: modMentions ?? undefined,
-      embeds: [welcomeEmbed],
-      components: [closeBtn],
-    });
+    // Lien vers le salon vocal si créé
+    if (voiceChannelId) {
+      await ticketChannel.send({ content: `🎧 Salon vocal : <#${voiceChannelId}>` });
+    }
 
     await interaction.editReply({ content: `✅ Ton ticket a été ouvert : <#${ticketChannel.id}>` });
   } catch (err) {

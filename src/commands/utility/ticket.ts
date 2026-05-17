@@ -199,14 +199,68 @@ export async function closeTicket(
 
   await interaction.editReply({ content: '✅ Ticket fermé. Le salon sera supprimé dans quelques secondes.' });
 
-  // Suppression auto
-  if (cfg.autoDelete) {
+  const cfgTyped = cfg as unknown as { autoDelete: boolean; autoDeleteDelay: number; logChannelId: string | null; closeMessageEnabled: boolean; closeMessage: string; closeDmEnabled: boolean };
+
+  // Envoyer le log dans le salon de logs si configuré
+  if (cfgTyped.logChannelId) {
+    try {
+      const logChannel = guild.channels.cache.get(cfgTyped.logChannelId) as import('discord.js').TextChannel | undefined;
+      if (logChannel) {
+        const { EmbedBuilder: Embed } = await import('discord.js');
+        const logEmbed = new Embed()
+          .setTitle(`🔒 Ticket #${ticket.id} fermé`)
+          .setColor(0xed4245)
+          .addFields(
+            { name: 'Ouvert par', value: `<@${ticket.userId}> (${ticket.username})`, inline: true },
+            { name: 'Fermé par', value: `<@${interaction.user.id}>`, inline: true },
+            { name: 'Raison', value: raison ?? 'Aucune raison fournie', inline: false },
+          )
+          .setFooter({ text: `#${channel.name}` })
+          .setTimestamp();
+        await logChannel.send({ embeds: [logEmbed] });
+      }
+    } catch { /* silencieux */ }
+  }
+
+  // Message de fermeture dans le salon + DM
+  if (cfgTyped.closeMessageEnabled && cfgTyped.closeMessage) {
+    try {
+      const closingMsg = cfgTyped.closeMessage
+        .replace(/{user\.mention}/g, `<@${ticket.userId}>`)
+        .replace(/{close\.reason}/g, raison ?? 'Aucune raison fournie')
+        .replace(/{ticket\.id}/g, String(ticket.id))
+        .replace(/{server\.name}/g, guild.name);
+      await channel.send({ content: closingMsg });
+      // DM si activé
+      if (cfgTyped.closeDmEnabled) {
+        try {
+          const member = await guild.members.fetch(ticket.userId).catch(() => null);
+          if (member) await member.send({ content: closingMsg });
+        } catch { /* DMs fermés — silencieux */ }
+      }
+    } catch { /* silencieux */ }
+  }
+
+  // Suppression auto du salon texte + salon vocal
+  const delay = (cfgTyped.autoDeleteDelay ?? 5) * 1000;
+  if (cfgTyped.autoDelete) {
+    setTimeout(async () => {
+      try { await channel.delete(); } catch { /* silencieux */ }
+      // Supprimer le salon vocal associé si existant
+      if (ticket.voiceChannelId) {
+        try {
+          const voiceCh = guild.channels.cache.get(ticket.voiceChannelId as string);
+          if (voiceCh) await voiceCh.delete();
+        } catch { /* silencieux */ }
+      }
+    }, delay);
+  } else if (ticket.voiceChannelId) {
+    // Même sans autoDelete, on supprime le vocal tout de suite
     setTimeout(async () => {
       try {
-        await channel.delete();
-      } catch {
-        // silencieux
-      }
-    }, (cfg.autoDeleteDelay ?? 5) * 1000);
+        const voiceCh = guild.channels.cache.get(ticket.voiceChannelId as string);
+        if (voiceCh) await voiceCh.delete();
+      } catch { /* silencieux */ }
+    }, 3000);
   }
 }
