@@ -393,7 +393,7 @@ model BotPersonnaliseConfig {
   activityText  String?
   streamUrl     String?
   // Couleurs
-  profileColor  String   @default("#EB459E")
+  profileColor  String   @default("#5865F2")
   activityColor String   @default("#F0B232")
   updatedAt     DateTime @updatedAt
 
