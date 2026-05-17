@@ -11,6 +11,7 @@ import { prisma } from './lib/prisma.js';
 import { startBotServer } from './server.js';
 import type { SlashCommand } from './lib/types.js';
 import { postTicketPanel } from './commands/utility/ticket.js';
+import { handleLogsUpdate } from './lib/logsHelper.js';
 
 declare module 'discord.js' {
   export interface Client {
@@ -25,6 +26,9 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildEmojisAndStickers,
+    GatewayIntentBits.GuildVoiceStates,
   ],
   partials: [Partials.Channel, Partials.Message, Partials.User, Partials.GuildMember],
 });
@@ -61,20 +65,23 @@ async function loadEvents() {
 
   for (const file of files) {
     const mod = await import(pathToFileURL(join(eventsPath, file)).href);
-    const event = mod.default;
-    if (event?.name && event?.execute) {
-      if (event.once) {
-        client.once(event.name, (...args) => event.execute(...args, client));
+    const handlers = [mod.default, ...Object.values(mod).filter(v => v !== mod.default)];
+    for (const event of handlers) {
+      if (!event || typeof event !== 'object') continue;
+      const e = event as any;
+      if (!e?.name || !e?.execute) continue;
+      if (e.once) {
+        client.once(e.name, (...args: any[]) => e.execute(...args, client));
       } else {
-        client.on(event.name, (...args) => event.execute(...args, client));
+        client.on(e.name, (...args: any[]) => e.execute(...args, client));
       }
-      logger.info(`Event chargé : ${event.name}`);
+      logger.info(`Event chargé : ${e.name}`);
     }
   }
 }
 
 async function setupRedisPubSub() {
-  await redisSub.subscribe('guild:update', 'antiinsulte:update', 'antiraid:update', 'arrivees:update', 'tickets:post-panel', 'tickets:setup-logs-channel', 'bot-personnalise:update');
+  await redisSub.subscribe('guild:update', 'antiinsulte:update', 'antiraid:update', 'arrivees:update', 'tickets:post-panel', 'tickets:setup-logs-channel', 'bot-personnalise:update', 'logs:update');
   redisSub.on('message', (channel: string, message: string) => {
     try {
       const data = JSON.parse(message);
@@ -90,6 +97,9 @@ async function setupRedisPubSub() {
       } else if (channel === 'arrivees:update') {
         logger.info({ data }, 'Config arrivées & départs mise à jour');
         redis.set(`arrivees:invalidate:${data.guildId}`, '1', 'EX', 60).catch(() => {});
+      } else if (channel === 'logs:update') {
+        logger.info({ data }, 'Config logs Discord mise à jour');
+        handleLogsUpdate(data);
       } else if (channel === 'tickets:post-panel') {
         logger.info({ data }, 'Poster panel tickets demandé depuis le dashboard');
         const guild = client.guilds.cache.get(data.guildId);

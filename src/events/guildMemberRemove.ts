@@ -1,4 +1,5 @@
 import { Events, type GuildMember, type PartialGuildMember, ChannelType } from 'discord.js';
+import { sendLog, makeEmbed, LogColors } from '../lib/logsHelper.js';
 import { getGuildConfig } from '../lib/cache.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
@@ -44,6 +45,21 @@ export default {
             await (channel as any).send(message).catch(() => {});
           }
         }
+      }
+      // ── Log départ ────────────────────────────────────────────────────────
+      if (member.user) {
+        const roles = member.roles?.cache
+          ? [...member.roles.cache.values()].filter(r => r.id !== member.guild.id).map(r => `<@&${r.id}>`).join(' ') || 'Aucun'
+          : 'Aucun';
+        const embedLog = makeEmbed(LogColors.leave, '📤 Membre parti',
+          `<@${member.id}> **${member.user.username}**`)
+          .addFields(
+            { name: 'ID', value: member.id, inline: true },
+            { name: 'Membres restants', value: `${member.guild.memberCount}`, inline: true },
+            { name: 'Rôles', value: roles.length > 1024 ? roles.slice(0, 1021) + '...' : roles },
+          )
+          .setThumbnail(member.user.displayAvatarURL());
+        await sendLog(member.client, member.guild.id, 'logDeparts', embedLog);
       }
     } catch (err) {
       logger.error({ err }, 'Erreur dans guildMemberRemove');

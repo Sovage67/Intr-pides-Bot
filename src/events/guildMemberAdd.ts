@@ -1,4 +1,5 @@
 import { Events, type GuildMember, ChannelType, EmbedBuilder } from 'discord.js';
+import { sendLog, makeEmbed, LogColors } from '../lib/logsHelper.js';
 import { getGuildConfig } from '../lib/cache.js';
 import { prisma } from '../lib/prisma.js';
 import { redis } from '../lib/redis.js';
@@ -339,6 +340,18 @@ export default {
             .replace(/{count}/g, member.guild.memberCount.toString());
           await (channel as any).send(message).catch(() => {});
         }
+      }
+      // ── Log arrivée ──────────────────────────────────────────────────────
+      if (member.user) {
+        const embedLog = makeEmbed(LogColors.join, '📥 Membre arrivé',
+          `<@${member.id}> **${member.user.username}**`)
+          .addFields(
+            { name: 'ID', value: member.id, inline: true },
+            { name: 'Compte créé le', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:d>`, inline: true },
+            { name: 'Membres', value: `${member.guild.memberCount}`, inline: true },
+          )
+          .setThumbnail(member.user.displayAvatarURL());
+        await sendLog(member.client, member.guild.id, 'logArrivees', embedLog);
       }
     } catch (err) {
       logger.error({ err }, 'Erreur dans guildMemberAdd');
