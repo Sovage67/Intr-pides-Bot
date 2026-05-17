@@ -171,7 +171,8 @@ export async function closeTicket(
   guildId: string,
   raison: string | null,
 ) {
-  const { guild, channel } = interaction;
+  const { guild } = interaction;
+  const channel = interaction.channel as import('discord.js').TextChannel | null;
   if (!guild || !channel) return;
 
   const ticket = await prisma.ticket.findUnique({ where: { channelId: channel.id } });
