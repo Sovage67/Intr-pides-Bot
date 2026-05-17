@@ -331,6 +331,14 @@ export default {
         return;
       }
 
+      // ── TICKET CLOSE MODAL ────────────────────────────────────────────────
+      if (customId === 'ticket:close_modal') {
+        const raison = interaction.fields.getTextInputValue('close_reason').trim() || null;
+        // @ts-ignore
+        await closeTicket(interaction, guild.id, raison);
+        return;
+      }
+
       // Vérification propriétaire pour tous les modals du Panel Admin
       if (
         ['modal_warn', 'modal_kick', 'modal_ban', 'modal_clear', 'modal_mute'].includes(customId) &&
@@ -748,8 +756,39 @@ export default {
       // ── TICKET CLOSE ──────────────────────────────────────────────────────
       if (interaction.customId === 'ticket:close') {
         if (!interaction.guild) return;
-        // @ts-ignore
-        await closeTicket(interaction, interaction.guild.id, null);
+        const guild = interaction.guild;
+
+        // Vérifier les droits : fondateur ou rôle modérateur configuré
+        const tkCfgClose = await prisma.ticketConfig.findUnique({ where: { guildId: guild.id } });
+        const modRolesClose: string[] = (tkCfgClose?.modRoles ?? []) as string[];
+        const memberClose = await guild.members.fetch(interaction.user.id).catch(() => null);
+        const isOwnerClose = interaction.user.id === guild.ownerId;
+        const isModClose = memberClose ? modRolesClose.some(r => memberClose.roles.cache.has(r)) : false;
+
+        if (!isOwnerClose && !isModClose) {
+          await interaction.reply({
+            content: '🔒 Seuls le fondateur et les modérateurs peuvent fermer ce ticket.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        // Ouvrir le modal pour saisir la raison
+        const closeModal = new ModalBuilder()
+          .setCustomId('ticket:close_modal')
+          .setTitle('Fermer le ticket')
+          .addComponents(
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+              new TextInputBuilder()
+                .setCustomId('close_reason')
+                .setLabel('Raison de la fermeture')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Ex : Problème résolu, demande traitée...')
+                .setRequired(false)
+                .setMaxLength(500),
+            ),
+          );
+        await interaction.showModal(closeModal);
         return;
       }
 
