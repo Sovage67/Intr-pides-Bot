@@ -1,11 +1,34 @@
 import { Events, type GuildMember, type PartialGuildMember } from 'discord.js';
 import { sendLog, makeEmbed, LogColors } from '../lib/logsHelper.js';
+import { prisma } from '../lib/prisma.js';
 
 export default {
   name: Events.GuildMemberUpdate,
   async execute(oldMember: GuildMember | PartialGuildMember, newMember: GuildMember) {
     try {
       const guildId = newMember.guild.id;
+
+      // ── Protection pseudo bot (premium requis) ────────────────────────────────
+      const botId = newMember.client.user?.id;
+      if (botId && newMember.id === botId && oldMember.nickname !== newMember.nickname) {
+        const guild = await prisma.guild.findUnique({ where: { id: guildId } });
+        const hasPremium = guild?.premium && (!guild.premiumUntil || guild.premiumUntil > new Date());
+        if (!hasPremium) {
+          try {
+            await newMember.setNickname(oldMember.nickname ?? null, 'Premium requis pour changer le pseudo du bot');
+            // Tenter d'envoyer un message au fondateur
+            const owner = await newMember.guild.fetchOwner().catch(() => null);
+            if (owner) {
+              await owner.send(
+                'Le pseudo du bot ne peut pas etre modifie sans le premium. Active le premium dans le dashboard : https://intrepides.vercel.app'
+              ).catch(() => null);
+            }
+          } catch {
+            // silencieux si pas les permissions
+          }
+          return;
+        }
+      }
 
       // ── Log pseudo ──────────────────────────────────────────────────────────
       if (oldMember.nickname !== newMember.nickname) {
