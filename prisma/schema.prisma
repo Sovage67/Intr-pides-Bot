@@ -457,3 +457,33 @@ model LogsConfig {
 
   @@index([guildId])
 }
+
+model DatabaseIDEntry {
+  id             Int                @id @default(autoincrement())
+  targetUserId   String             @unique
+  targetUsername String
+  targetAvatar   String?
+  reportCount    Int                @default(1)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  reports        DatabaseIDReport[]
+
+  @@index([targetUserId])
+}
+
+model DatabaseIDReport {
+  id               Int             @id @default(autoincrement())
+  entryId          Int
+  entry            DatabaseIDEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  guildId          String
+  guildName        String
+  reportedBy       String
+  reportedByName   String
+  reason           String
+  proofImageUrl    String
+  createdAt        DateTime        @default(now())
+
+  @@index([entryId])
+  @@index([guildId])
+  @@index([reportedBy])
+}
