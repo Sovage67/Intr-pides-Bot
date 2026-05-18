@@ -698,29 +698,23 @@ export default {
         }
 
         if (selected === 'cancer') {
+          const desc = [
+            '> Utilisez `/cancer` pour signaler un utilisateur dans la **liste noire globale**.',
+            '',
+            '**Commande :**',
+            '`/cancer utilisateur:@user raison:... preuve:[image]`',
+            '',
+            '**Parametres requis :**',
+            '`@utilisateur` — Mentionner le membre a signaler',
+            '`raison` — Decrire la raison du signalement',
+            '`preuve` — Joindre un screenshot ou une photo',
+            '',
+            '> Le signalement sera visible dans le dashboard de tous les serveurs.',
+          ].join('\n');
           const embed = new EmbedBuilder()
             .setTitle('Database ID — Signaler un utilisateur')
             .setColor(0xED4245)
-            .setDescription(
-              '> Utilisez la commande ci-dessous pour signaler un utilisateur dans la **liste noire globale**.
-
-' +
-              '**Commande :**
-' +
-              '`/cancer utilisateur:@user raison:... preuve:[image]`
-
-' +
-              '**Parametres requis :**
-' +
-              '`@utilisateur` — Mentionner le membre a signaler
-' +
-              '`raison` — Decrire la raison du signalement
-' +
-              '`preuve` — Joindre un screenshot ou une photo
-
-' +
-              '> Le signalement sera visible dans le dashboard de tous les serveurs ayant le module **Database ID** actif.',
-            )
+            .setDescription(desc)
             .setFooter({ text: 'Panel Fondateur • Fondateur uniquement' })
             .setTimestamp();
           await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
