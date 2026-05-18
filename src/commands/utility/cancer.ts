@@ -26,15 +26,17 @@ const command: SlashCommand = {
         .setRequired(true),
     ),
 
-  async execute(interaction) {
+  async execute(interaction): Promise<void> {
     if (!interaction.guild) {
-      return interaction.reply({ content: 'Commande utilisable uniquement dans un serveur.', ephemeral: true });
+      await interaction.reply({ content: 'Commande utilisable uniquement dans un serveur.', ephemeral: true });
+      return;
     }
     if (interaction.guild.ownerId !== interaction.user.id) {
-      return interaction.reply({
+      await interaction.reply({
         content: 'Seul le **fondateur du serveur** peut utiliser cette commande.',
         ephemeral: true,
       });
+      return;
     }
 
     const targetUser = interaction.options.getUser('utilisateur', true);
@@ -42,16 +44,19 @@ const command: SlashCommand = {
     const preuve     = interaction.options.getAttachment('preuve', true);
 
     if (!preuve.contentType?.startsWith('image/')) {
-      return interaction.reply({
+      await interaction.reply({
         content: 'La preuve doit etre une image (jpg, png, gif, webp...).',
         ephemeral: true,
       });
+      return;
     }
     if (targetUser.id === interaction.user.id) {
-      return interaction.reply({ content: 'Tu ne peux pas te signaler toi-meme.', ephemeral: true });
+      await interaction.reply({ content: 'Tu ne peux pas te signaler toi-meme.', ephemeral: true });
+      return;
     }
     if (targetUser.bot) {
-      return interaction.reply({ content: 'Tu ne peux pas signaler un bot.', ephemeral: true });
+      await interaction.reply({ content: 'Tu ne peux pas signaler un bot.', ephemeral: true });
+      return;
     }
 
     await interaction.deferReply({ ephemeral: true });
@@ -63,9 +68,8 @@ const command: SlashCommand = {
           where: { entryId: existing.id, guildId: interaction.guildId!, reportedBy: interaction.user.id },
         });
         if (dupe) {
-          return interaction.editReply({
-            content: "Tu as deja signale cet utilisateur depuis ce serveur.",
-          });
+          await interaction.editReply({ content: "Tu as deja signale cet utilisateur depuis ce serveur." });
+          return;
         }
       }
 
@@ -111,11 +115,11 @@ const command: SlashCommand = {
         .setFooter({ text: 'Visible dans le dashboard -> Module Database ID' })
         .setTimestamp();
 
-      return interaction.editReply({ embeds: [embed] });
+      await interaction.editReply({ embeds: [embed] });
 
     } catch (err) {
       console.error('[/cancer]', err);
-      return interaction.editReply({ content: 'Une erreur est survenue. Reessaie dans un moment.' });
+      await interaction.editReply({ content: 'Une erreur est survenue. Reessaie dans un moment.' });
     }
   },
 };
