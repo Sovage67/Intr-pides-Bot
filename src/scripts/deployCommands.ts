@@ -28,7 +28,7 @@ async function main() {
   // Seul le dossier "panels" est déployé sur Discord.
   // Les autres commandes (moderation, economy, utility) sont exécutées
   // directement via les menus déroulants des panels et n'apparaissent pas dans le /.
-  const DEPLOYED_CATEGORIES = ['panels'];
+  const DEPLOYED_CATEGORIES = ['panels', 'utility'];
 
   for (const category of readdirSync(commandsPath)) {
     if (!DEPLOYED_CATEGORIES.includes(category)) continue;
